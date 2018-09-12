@@ -24,7 +24,7 @@ import           GHC.Word                               (Word64)
 
 import           Data.Functor                           (Functor)
 
-import           Data.ByteString.Char8                  (ByteString)
+import           Data.ByteString                        (ByteString)
 import           Data.Vector.Storable                   (Vector)
 
 import           HaskellWorks.Data.BalancedParens       (SimpleBalancedParens)

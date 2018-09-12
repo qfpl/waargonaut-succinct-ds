@@ -27,14 +27,19 @@ module Waargonaut.Decode.Succinct
   , manyMoves
   , down
   , up
+  , DI.try
   , moveRightN
   , moveRight1
   , moveLeftN
   , moveLeft1
-  , moveToValAtKey
+  , moveToKey
 
-    -- * Decoding
+    -- * Decoding at cursor
   , jsonAtCursor
+  , fromKey
+  , focus
+
+    -- * Provided Decoders
   , leftwardCons
   , rightwardSnoc
   , directedConsumption
@@ -47,7 +52,10 @@ module Waargonaut.Decode.Succinct
   , text
   , boolean
   , null
-  , array
+  , nonemptyAt
+  , nonempty
+  , listAt
+  , list
   ) where
 
 import           Control.Lens                              (Cons, Lens', Snoc,
@@ -86,8 +94,9 @@ import           Data.Monoid                               (mempty)
 
 import           Data.Scientific                           (Scientific)
 
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import           Data.List                                 (replicate)
-import           Data.Maybe                                (Maybe (..))
+import           Data.Maybe                                (Maybe (..),maybe)
 
 import           Data.Text                                 (Text)
 
@@ -233,18 +242,37 @@ focus decoder curs = DecodeResult $ do
   p <- ask
   lift $ runDecoder decoder p curs
 
-moveToValAtKey
+moveToKey
   :: Monad f
   => Text
   -> JCurs
   -> DecodeResult f JCurs
-moveToValAtKey k c =
+moveToKey k c =
   -- Tease out the key
   focus text c >>= \k' -> if k' == k -- Are we at the key we want to be at ?
   -- if we are, then move into the THING at the key
   then moveRight1 c
   -- if not, then jump to the next key index, the adjacent sibling is opening of the value of the current key
-  else moveRightN 2 c >>= moveToValAtKey k
+  else moveRightN 2 c >>= moveToKey k
+
+-- | Move to the first occurence of this key, as per 'moveToKey' and then
+-- attempt to run the given 'Decoder' on that value, returning the result.
+--
+-- @
+-- ...
+-- txtVal <- fromKey "foo" text c
+-- ...
+-- @
+--
+fromKey
+  :: ( Monad f
+     )
+  => Text
+  -> Decoder f b
+  -> JCurs
+  -> DecodeResult f b
+fromKey k d =
+  moveToKey k >=> focus d
 
 atCursor
   :: Monad f
@@ -344,8 +372,30 @@ null = atCursor "null" DI.null'
 boolean :: Monad f => Decoder f Bool
 boolean = atCursor "bool" DI.boolean'
 
-array :: Monad f => Decoder f a -> JCurs -> DecodeResult f [a]
-array elemD = down >=> rightwardSnoc mempty elemD
+nonemptyAt
+  :: Monad f
+  => Decoder f a
+  -> JCurs
+  -> DecodeResult f (NonEmpty a)
+nonemptyAt elemD = down >=> \curs -> do
+  h <- focus elemD curs
+  xs <- moveRight1 curs
+  (h :|) <$> rightwardSnoc [] elemD xs
+
+nonempty :: Monad f => Decoder f a -> Decoder f (NonEmpty a)
+nonempty d = withCursor (nonemptyAt d)
+
+listAt
+  :: Monad f
+  => Decoder f a
+  -> JCurs
+  -> DecodeResult f [a]
+listAt elemD curs = DI.try (down curs) >>= maybe
+  (pure mempty)
+  (rightwardSnoc mempty elemD)
+
+list :: Monad f => Decoder f a -> Decoder f [a]
+list d = withCursor (listAt d)
 
 -- fooDecoder :: Monad f => Decoder f [Int]
 -- fooDecoder = withCursor (array int)
