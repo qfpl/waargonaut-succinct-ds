@@ -58,9 +58,10 @@ prop_maybe_maybe = property $ do
   where
     enc =
       let
-        beepObj = W.mapLikeObj (W.maybeOrNull W.bool `W.atKey` "beep")
+        beepObj = W.mapLikeObj $
+          W.maybeOrNull W.bool `W.atKey` "beep"
       in
-        -- Encode as {"boop":{"beep":<bool|null>}|null}
+        -- Encode as {"boop":{"beep": bool|null }}|null
         W.maybeOrNull (
           W.mapLikeObj (
               beepObj `W.atKey` "boop"
@@ -69,10 +70,10 @@ prop_maybe_maybe = property $ do
 
     dec =
       let
-        toBoop = WS.down >=> WS.moveToKey "boop"
-        toBeep = WS.down >=> WS.fromKey "beep" WS.boolean
+        boopObj = WS.down >=> WS.moveToKey "boop"
+        beepObj = WS.down >=> WS.fromKey "beep" WS.boolean
       in
-        WS.withCursor $ WS.try . toBoop >=> traverse (WS.try . toBeep)
+        WS.withCursor (WS.try . boopObj >=> traverse (WS.try . beepObj))
 
 shuffleListDecoder :: Monad f => Decoder f [Int]
 shuffleListDecoder = WS.withCursor $ \curs -> do
